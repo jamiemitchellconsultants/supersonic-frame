@@ -45,16 +45,66 @@ async function createEngine() {
 
 async function boot(message) {
   try {
+    stopSession();
     const engine = await createEngine();
     await engine.loadSynthDefs(Array.from(message.names ?? []));
     sonic = engine;
     sessionEpoch = message.epoch ?? null;
+    startSession();
     startClockPush();
     reply("boot", message.id, { ok: true, ...infoFields() });
   } catch (error) {
     sonic = null;
     reply("boot", message.id, { ok: false, error: `boot-failed:${error.message}` });
   }
+}
+
+// Epoch-scoped feedback, ported from Grooveloom's engine-host: raw decoded facts,
+// at most FEEDBACK_LIMIT records held; beyond that the overflow flag is pushed once.
+const FEEDBACK_LIMIT = 4096;
+const RECORD_LIMIT_BYTES = 65536;
+let feedbackCount = 0;
+let overflowNotified = false;
+let inHandler = null;
+
+function startSession() {
+  feedbackCount = 0;
+  overflowNotified = false;
+  if (!sonic) return;
+  const captured = sessionEpoch;
+  inHandler = (message) => {
+    if (captured !== sessionEpoch) return;
+    if (feedbackCount >= FEEDBACK_LIMIT) {
+      if (!overflowNotified) { overflowNotified = true; post({ kind: "feedback", epoch: sessionEpoch, overflow: true, facts: [] }); }
+      return;
+    }
+    feedbackCount++;
+    post({ kind: "feedback", epoch: sessionEpoch, overflow: false, facts: [capRecord(message)] });
+  };
+  sonic.on("in", inHandler);
+}
+
+function stopSession() {
+  if (sonic && inHandler) {
+    try { sonic.off("in", inHandler); } catch { /* the engine is gone */ }
+  }
+  inHandler = null;
+  sessionEpoch = null;
+  feedbackCount = 0;
+  overflowNotified = false;
+}
+
+function capRecord(message) {
+  if (!Array.isArray(message) || message.length === 0 || typeof message[0] !== "string") return [];
+  const record = [message[0]];
+  for (let i = 1; i < message.length; i++) {
+    const arg = message[i];
+    record.push(typeof arg === "bigint" ? Number(arg) : ArrayBuffer.isView(arg) ? Array.from(arg) : arg);
+    let text;
+    try { text = JSON.stringify(record); } catch { return []; }
+    if (text.length > RECORD_LIMIT_BYTES) { record.pop(); break; }
+  }
+  return record;
 }
 
 function startClockPush() {
@@ -85,6 +135,18 @@ async function handle(message) {
     case "info":
       if (!sonic) return reply("info", message.id, { ok: false, error: "boot-failed:engine is not booted" });
       return reply("info", message.id, { ok: true, ...infoFields() });
+    case "loadSynthDef":
+      if (!sonic) return reply("loadSynthDef", message.id, { ok: false, error: "engine is not booted" });
+      try { await sonic.loadSynthDef(message.bytes); return reply("loadSynthDef", message.id, { ok: true }); }
+      catch (error) { return reply("loadSynthDef", message.id, { ok: false, error: error.message }); }
+    case "allocSample":
+      if (!sonic) return reply("allocSample", message.id, { ok: false, error: "engine is not booted" });
+      try { await sonic.allocSample(message.bufferId, message.frames, message.channels); return reply("allocSample", message.id, { ok: true }); }
+      catch (error) { return reply("allocSample", message.id, { ok: false, error: error.message }); }
+    case "purge":
+      if (!sonic) return reply("purge", message.id, { ok: false, error: "engine is not booted" });
+      try { await sonic.purge(); return reply("purge", message.id, { ok: true }); }
+      catch (error) { return reply("purge", message.id, { ok: false, error: error.message }); }
     default:
       return reply(message.kind, message.id, { ok: false, error: `unknown control ${message.kind}` });
   }
