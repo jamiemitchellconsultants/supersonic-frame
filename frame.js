@@ -11,7 +11,7 @@ let sonic = null;
 let selectedDeviceId = null;
 let engineFactory = null;
 let sessionEpoch = null;
-let clockTimer = null;
+let stopTicker = null;
 
 function post(message) {
   if (embedded && embedderOrigin) window.parent.postMessage(message, embedderOrigin);
@@ -109,14 +109,28 @@ function startClockPush() {
       if (typeof now === "number" && Number.isFinite(now)) post({ kind: "clock", seconds: now });
     } catch { /* a dead engine stops the clock; the embedder fails closed */ }
   };
-  clockTimer = setInterval(push, 100);
-  clockTimer.unref?.();
+  stopTicker = every(100, push);
   push();
 }
 
 function stopClockPush() {
-  if (clockTimer !== null) clearInterval(clockTimer);
-  clockTimer = null;
+  stopTicker?.();
+  stopTicker = null;
+}
+
+// Calls tick every ms milliseconds, returning how to stop. The timer runs in a worker: the
+// frame is hidden, and while it is silent Chrome slows a page timer to about once a second,
+// which the embedder rightly reads as a stopped clock.
+function every(ms, tick) {
+  if (typeof Worker !== "function") {
+    const timer = setInterval(tick, ms);
+    timer.unref?.();
+    return () => clearInterval(timer);
+  }
+  const source = new Blob([`setInterval(() => postMessage(0), ${ms})`], { type: "text/javascript" });
+  const worker = new Worker(URL.createObjectURL(source));
+  worker.onmessage = tick;
+  return () => worker.terminate();
 }
 
 async function handle(message) {
