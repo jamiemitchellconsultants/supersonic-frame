@@ -143,6 +143,21 @@ async function handle(message) {
       if (!sonic) return reply("allocSample", message.id, { ok: false, error: "engine is not booted" });
       try { await sonic.allocSample(message.bufferId, message.frames, message.channels); return reply("allocSample", message.id, { ok: true }); }
       catch (error) { return reply("allocSample", message.id, { ok: false, error: error.message }); }
+    case "selectDevice":
+      if (!sonic) return reply("selectDevice", message.id, { ok: false, error: "engine is not booted" });
+      try {
+        if (typeof sonic.audioContext.setSinkId !== "function") throw new Error("output device selection is not available");
+        await sonic.audioContext.setSinkId(message.deviceId);
+        return reply("selectDevice", message.id, { ok: true });
+      } catch (error) { return reply("selectDevice", message.id, { ok: false, error: error.message }); }
+    case "cueProbe": {
+      try {
+        const probe = new AudioContext();
+        const maxChannelCount = probe.destination.maxChannelCount;
+        void probe.close?.();
+        return reply("cueProbe", message.id, { ok: true, maxChannelCount, fourOutputDeliverable: maxChannelCount >= 4 });
+      } catch (error) { return reply("cueProbe", message.id, { ok: false, error: error.message }); }
+    }
     case "purge":
       if (!sonic) return reply("purge", message.id, { ok: false, error: "engine is not booted" });
       try { await sonic.purge(); return reply("purge", message.id, { ok: true }); }
