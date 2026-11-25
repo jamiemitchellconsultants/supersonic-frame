@@ -6,6 +6,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { stampWorker } from "./stamp.mjs";
 
 const VERSION = "0.88.0";
 const SYNTHDEFS = [
@@ -40,7 +41,7 @@ writeFileSync(new URL("supersonic/VERSION", dist), `${VERSION}\n`);
 
 for (const file of ["index.html", "frame.js", "sw.js"]) cpSync(new URL(`../${file}`, import.meta.url), new URL(file, dist));
 
-const { readdirSync, statSync } = await import("node:fs");
+const { readFileSync, readdirSync, statSync } = await import("node:fs");
 const list = [];
 const walk = (dir, prefix) => {
   for (const name of readdirSync(dir)) {
@@ -51,6 +52,9 @@ const walk = (dir, prefix) => {
 };
 walk(dist.pathname, "");
 list.sort();
+const cached = list.filter((path) => path !== "sw.js").map((path) => [path, readFileSync(new URL(path, dist))]);
+const worker = new URL("sw.js", dist);
+writeFileSync(worker, stampWorker(readFileSync(worker, "utf8"), cached));
 list.unshift("./");
 writeFileSync(new URL("precache.json", dist), `${JSON.stringify(list, null, 2)}\n`);
 console.log(`built dist/ with supersonic-scsynth@${VERSION}, ${SYNTHDEFS.length} SynthDefs and ${list.length} precached files`);
