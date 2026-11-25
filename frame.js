@@ -8,6 +8,7 @@ const embedded = window.parent !== window;
 const embedderOrigin = document.referrer ? new URL(document.referrer).origin : null;
 
 let sonic = null;
+let selectedDeviceId = null;
 let engineFactory = null;
 let sessionEpoch = null;
 let clockTimer = null;
@@ -148,11 +149,18 @@ async function handle(message) {
       try {
         if (typeof sonic.audioContext.setSinkId !== "function") throw new Error("output device selection is not available");
         await sonic.audioContext.setSinkId(message.deviceId);
+        selectedDeviceId = message.deviceId;
         return reply("selectDevice", message.id, { ok: true });
       } catch (error) { return reply("selectDevice", message.id, { ok: false, error: error.message }); }
     case "cueProbe": {
       try {
         const probe = new AudioContext();
+        // Probe the device the user selected, not the browser default: select it on
+        // the probe context first when one is remembered (speaker-selection delegated).
+        if (selectedDeviceId && typeof probe.setSinkId === "function") {
+          try { await probe.setSinkId(selectedDeviceId); }
+          catch { return reply("cueProbe", message.id, { ok: true, maxChannelCount: probe.destination.maxChannelCount, fourOutputDeliverable: false }); }
+        }
         const maxChannelCount = probe.destination.maxChannelCount;
         void probe.close?.();
         return reply("cueProbe", message.id, { ok: true, maxChannelCount, fourOutputDeliverable: maxChannelCount >= 4 });

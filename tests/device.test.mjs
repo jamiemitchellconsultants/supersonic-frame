@@ -12,8 +12,11 @@ globalThis.location = { origin: "http://127.0.0.1:7441" };
 
 let sinkId = "default";
 let refuseDevice = true;
+const probeSinks = [];
 globalThis.AudioContext = class {
-  constructor() { this.destination = { maxChannelCount: 6 }; }
+  constructor() { this.destination = { maxChannelCount: 6 }; probeSinks.push(this); }
+  async setSinkId(id) { this.sinkId = id; }
+  async close() {}
 };
 
 const engine = {
@@ -51,4 +54,14 @@ test("probe reports the true channel count and routes nothing", async () => {
   assert.equal(reply.ok, true);
   assert.equal(reply.maxChannelCount, 6);
   assert.equal(reply.fourOutputDeliverable, true);
+});
+
+test("the probe runs on the selected device, not a default context", async () => {
+  refuseDevice = false;
+  const selected = await request({ kind: "selectDevice", id: 4, deviceId: "usb-interface" });
+  assert.equal(selected.find((m) => m.kind === "selectDevice").ok, true);
+  probeSinks.length = 0;
+  const replies = await request({ kind: "cueProbe", id: 5 });
+  assert.equal(replies.find((m) => m.kind === "cueProbe").ok, true);
+  assert.equal(probeSinks.at(-1).sinkId, "usb-interface");
 });
