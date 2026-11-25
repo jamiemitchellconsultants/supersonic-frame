@@ -166,7 +166,28 @@ window.addEventListener("message", (event) => {
   if (event.data instanceof Uint8Array) sonic?.sendOSC(event.data);
 });
 
-if (embedded && embedderOrigin) post({ kind: "ready", protocol: PROTOCOL_VERSION });
+async function waitForOfflineCache() {
+  if (!("serviceWorker" in navigator)) return;
+  await navigator.serviceWorker.register("sw.js");
+  await navigator.serviceWorker.ready;
+  const list = await (await fetch("precache.json")).json();
+  const cache = await caches.open("frame-v1");
+  const deadline = Date.now() + 15000;
+  for (;;) {
+    let complete = true;
+    for (const path of list) if (!(await cache.match(path))) { complete = false; break; }
+    if (complete) return;
+    if (Date.now() > deadline) throw new Error("offline cache incomplete");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
+if (embedded && embedderOrigin) {
+  waitForOfflineCache().then(
+    () => post({ kind: "ready", protocol: PROTOCOL_VERSION }),
+    () => { /* cache incomplete: no ready, the embedder reports unreachable */ },
+  );
+}
 
 export function __setEngineFactoryForTests(factory) {
   engineFactory = factory;

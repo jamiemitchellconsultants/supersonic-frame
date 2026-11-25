@@ -38,5 +38,18 @@ for (const def of SYNTHDEFS)
 cpSync(join(work, "supersonic-scsynth-synthdefs/package/LICENSE"), new URL("supersonic/synthdefs/LICENSE", dist).pathname);
 writeFileSync(new URL("supersonic/VERSION", dist), `${VERSION}\n`);
 
-for (const file of ["index.html", "frame.js"]) cpSync(new URL(`../${file}`, import.meta.url), new URL(file, dist));
-console.log(`built dist/ with supersonic-scsynth@${VERSION} and ${SYNTHDEFS.length} SynthDefs`);
+for (const file of ["index.html", "frame.js", "sw.js"]) cpSync(new URL(`../${file}`, import.meta.url), new URL(file, dist));
+
+const { readdirSync, statSync } = await import("node:fs");
+const list = [];
+const walk = (dir, prefix) => {
+  for (const name of readdirSync(dir)) {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) walk(path, `${prefix}${name}/`);
+    else list.push(`${prefix}${name}`);
+  }
+};
+walk(dist.pathname, "");
+list.sort();
+writeFileSync(new URL("precache.json", dist), `${JSON.stringify(list, null, 2)}\n`);
+console.log(`built dist/ with supersonic-scsynth@${VERSION}, ${SYNTHDEFS.length} SynthDefs and ${list.length} precached files`);
