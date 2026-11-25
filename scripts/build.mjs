@@ -1,8 +1,42 @@
-// Assembles the static site into dist/. The skeleton copies the page as-is; the
-// SuperSonic payload joins it when the frame boots the engine (engine-frame Task 5).
-import { cpSync, mkdirSync, rmSync } from "node:fs";
+// Assembles the static site into dist/: the frame page plus SuperSonic 0.88.0 from npm
+// (the same packages and SynthDef list Grooveloom's vendoring script used), so a frame
+// build carries its engine exactly as the in-page build did.
+import { cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-rmSync(new URL("../dist", import.meta.url), { recursive: true, force: true });
-mkdirSync(new URL("../dist", import.meta.url), { recursive: true });
-for (const file of ["index.html", "frame.js"]) cpSync(new URL(`../${file}`, import.meta.url), new URL(`../dist/${file}`, import.meta.url));
-console.log("built dist/");
+const VERSION = "0.88.0";
+const SYNTHDEFS = [
+  "beep", "saw", "square", "tri", "pulse", "dsaw", "pluck", "tb303", "prophet", "fm",
+  "sc808_bassdrum", "sc808_snare", "sc808_clap", "sc808_closed_hihat", "sc808_open_hihat",
+  "sc808_rimshot", "sc808_cowbell", "sc808_claves", "sc808_maracas", "sc808_tomlo",
+  "sc808_tommid", "sc808_tomhi", "sc808_cymbal",
+];
+
+const dist = new URL("../dist/", import.meta.url);
+rmSync(dist, { recursive: true, force: true });
+mkdirSync(new URL("supersonic/core", dist), { recursive: true });
+mkdirSync(new URL("supersonic/synthdefs", dist), { recursive: true });
+
+const work = mkdtempSync(join(tmpdir(), "supersonic-frame-"));
+for (const pkg of ["supersonic-scsynth", "supersonic-scsynth-core", "supersonic-scsynth-synthdefs"]) {
+  const dir = join(work, pkg);
+  mkdirSync(dir, { recursive: true });
+  execFileSync("npm", ["pack", `${pkg}@${VERSION}`, "--silent"], { cwd: dir, stdio: "inherit" });
+  execFileSync("tar", ["xzf", `${pkg}-${VERSION}.tgz`], { cwd: dir });
+}
+
+cpSync(join(work, "supersonic-scsynth/package/dist"), new URL("supersonic", dist).pathname, { recursive: true });
+cpSync(join(work, "supersonic-scsynth/package/LICENSE"), new URL("supersonic/LICENSE", dist).pathname);
+cpSync(join(work, "supersonic-scsynth-core/package/wasm"), new URL("supersonic/core/wasm", dist).pathname, { recursive: true });
+cpSync(join(work, "supersonic-scsynth-core/package/workers"), new URL("supersonic/core/workers", dist).pathname, { recursive: true });
+cpSync(join(work, "supersonic-scsynth-core/package/LICENSE"), new URL("supersonic/core/LICENSE", dist).pathname);
+for (const def of SYNTHDEFS)
+  cpSync(join(work, `supersonic-scsynth-synthdefs/package/synthdefs/sonic-pi-${def}.scsyndef`), new URL(`supersonic/synthdefs/${def}.scsyndef`, dist).pathname);
+cpSync(join(work, "supersonic-scsynth-synthdefs/package/LICENSE"), new URL("supersonic/synthdefs/LICENSE", dist).pathname);
+writeFileSync(new URL("supersonic/VERSION", dist), `${VERSION}\n`);
+
+for (const file of ["index.html", "frame.js"]) cpSync(new URL(`../${file}`, import.meta.url), new URL(file, dist));
+console.log(`built dist/ with supersonic-scsynth@${VERSION} and ${SYNTHDEFS.length} SynthDefs`);
