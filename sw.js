@@ -21,5 +21,14 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET" || new URL(event.request.url).origin !== self.location.origin) return;
-  event.respondWith(caches.match(event.request).then((hit) => hit ?? fetch(event.request)));
+  event.respondWith((async () => {
+    const hit = await caches.match(event.request);
+    if (hit) return hit;
+    // A navigation to the pinned root (…/v1/) is the precached "./" document, not a
+    // file of its own: serve it (or index.html) so an offline start never depends on
+    // the browser's HTTP cache, which expires minutes after the first load.
+    if (event.request.mode === "navigate")
+      return (await caches.match("./")) ?? (await caches.match("index.html")) ?? fetch(event.request);
+    return fetch(event.request);
+  })());
 });

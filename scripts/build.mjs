@@ -51,5 +51,6 @@ const walk = (dir, prefix) => {
 };
 walk(dist.pathname, "");
 list.sort();
+list.unshift("./");
 writeFileSync(new URL("precache.json", dist), `${JSON.stringify(list, null, 2)}\n`);
 console.log(`built dist/ with supersonic-scsynth@${VERSION}, ${SYNTHDEFS.length} SynthDefs and ${list.length} precached files`);
