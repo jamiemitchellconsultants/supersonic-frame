@@ -34,7 +34,7 @@ cpSync(join(work, "supersonic-scsynth-core/package/wasm"), new URL("supersonic/c
 cpSync(join(work, "supersonic-scsynth-core/package/workers"), new URL("supersonic/core/workers", dist).pathname, { recursive: true });
 cpSync(join(work, "supersonic-scsynth-core/package/LICENSE"), new URL("supersonic/core/LICENSE", dist).pathname);
 for (const def of SYNTHDEFS)
-  cpSync(join(work, `supersonic-scsynth-synthdefs/package/synthdefs/sonic-pi-${def}.scsyndef`), new URL(`supersonic/synthdefs/${def}.scsyndef`, dist).pathname);
+  cpSync(join(work, `supersonic-scsynth-synthdefs/package/synthdefs/sonic-pi-${def}.scsyndef`), new URL(`supersonic/synthdefs/sonic-pi-${def}.scsyndef`, dist).pathname);
 cpSync(join(work, "supersonic-scsynth-synthdefs/package/LICENSE"), new URL("supersonic/synthdefs/LICENSE", dist).pathname);
 writeFileSync(new URL("supersonic/VERSION", dist), `${VERSION}\n`);
 
