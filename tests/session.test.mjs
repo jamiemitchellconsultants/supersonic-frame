@@ -71,3 +71,13 @@ test("loadSynthDef loads bytes and a bare Uint8Array goes to the engine as OSC",
   for (const h of handlers) await h({ origin: "http://127.0.0.1:7439", source: globalThis.window.parent, data: packet });
   assert.deepEqual([...engine.lastOsc], [9, 9]);
 });
+
+test("the frame never overflows by total facts: it pushes each one and holds none", async () => {
+  await request({ kind: "boot", id: 6, names: [], epoch: 43 });
+  posted.length = 0;
+  for (let i = 0; i < 5000; i++) inHandler(["/n_end", i]);
+  const feedback = posted.map(([m]) => m).filter((m) => m.kind === "feedback");
+  assert.equal(feedback.length, 5000);
+  assert.ok(feedback.every((m) => m.overflow === false));
+  assert.deepEqual(feedback.at(-1).facts, [["/n_end", 4999]]);
+});

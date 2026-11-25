@@ -48,7 +48,7 @@ Request: `{kind: "info", id}`. Reply: `{sampleRate, baseLatencyMs, outputLatency
 
 ## feedback
 
-Push, frame → embedder, as produced: `{kind: "feedback", epoch, overflow, facts}` — raw decoded engine facts for the session epoch named in boot, bounded at 4096 records and 64 KiB per record; beyond that `overflow` is true and facts drop.
+Push, frame → embedder, as produced: `{kind: "feedback", epoch, overflow, facts}` — raw decoded engine facts for the session epoch named in boot, 64 KiB per record, trailing arguments dropped first. The frame pushes each fact as it arrives and holds none, so there is no limit on the total in a session. The embedder bounds the facts it has received and not yet consumed (Grooveloom holds 4096); past its bound it drops facts and treats the batch as overflowed. `overflow: true` in a push means the sender dropped facts.
 
 ## purge
 

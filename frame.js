@@ -60,26 +60,17 @@ async function boot(message) {
   }
 }
 
-// Epoch-scoped feedback, ported from Grooveloom's engine-host: raw decoded facts,
-// at most FEEDBACK_LIMIT records held; beyond that the overflow flag is pushed once.
-const FEEDBACK_LIMIT = 4096;
+// Epoch-scoped feedback, ported from Grooveloom's engine-host: raw decoded facts, each
+// pushed as it arrives. The frame holds none, so it never overflows; the embedder bounds
+// its own queue of undrained facts.
 const RECORD_LIMIT_BYTES = 65536;
-let feedbackCount = 0;
-let overflowNotified = false;
 let inHandler = null;
 
 function startSession() {
-  feedbackCount = 0;
-  overflowNotified = false;
   if (!sonic) return;
   const captured = sessionEpoch;
   inHandler = (message) => {
     if (captured !== sessionEpoch) return;
-    if (feedbackCount >= FEEDBACK_LIMIT) {
-      if (!overflowNotified) { overflowNotified = true; post({ kind: "feedback", epoch: sessionEpoch, overflow: true, facts: [] }); }
-      return;
-    }
-    feedbackCount++;
     post({ kind: "feedback", epoch: sessionEpoch, overflow: false, facts: [capRecord(message)] });
   };
   sonic.on("in", inHandler);
@@ -91,8 +82,6 @@ function stopSession() {
   }
   inHandler = null;
   sessionEpoch = null;
-  feedbackCount = 0;
-  overflowNotified = false;
 }
 
 function capRecord(message) {
